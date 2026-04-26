@@ -9,7 +9,6 @@
     ├── test_unit.py       # 7 Unit tests
     └── test_integration.py # 3 Integration tests
 
-
     
 🛠 Features & EndpointsThe Flask application serves a simple REST API with the following endpoints:EndpointDescriptionGET /Home page 
 Returns app statusGET /healthHealth check — Returns "healthy"GET /api/helloGreeting endpointGET /api/versionReturns current app version⛓️
