@@ -101,7 +101,7 @@ pipeline {
         }
         success {
             echo "Build #${BUILD_NUMBER} SUCCESSFUL on branch ${GIT_BRANCH}"
-            mail to: 'khushbakhtkhan868@gmail.com',
+            mail to: 'khushbakht.khan000@gmail.com',
                  subject: "Jenkins Build SUCCESS: ${JOB_NAME} #${BUILD_NUMBER}",
                  body: """
                  Build Successful!
