@@ -100,28 +100,10 @@ pipeline {
                              allowEmptyArchive: true
         }
         success {
-            echo "Build #${BUILD_NUMBER} SUCCESSFUL on branch ${GIT_BRANCH}"
-            mail to: 'khushbakht.khan000@gmail.com',
-                 subject: "Jenkins Build SUCCESS: ${JOB_NAME} #${BUILD_NUMBER}",
-                 body: """
-                 Build Successful!
-                 Job: ${JOB_NAME}
-                 Build Number: ${BUILD_NUMBER}
-                 Branch: ${GIT_BRANCH}
-                 URL: ${BUILD_URL}
-                 """
+            echo "Build SUCCESSFUL: ${JOB_NAME} #${BUILD_NUMBER} on ${GIT_BRANCH}"
         }
         failure {
-            echo "Build #${BUILD_NUMBER} FAILED on branch ${GIT_BRANCH}"
-            mail to: 'khushbakhtkhan868@gmail.com',
-                 subject: "Jenkins Build FAILED: ${JOB_NAME} #${BUILD_NUMBER}",
-                 body: """
-                 Build Failed!
-                 Job: ${JOB_NAME}
-                 Build Number: ${BUILD_NUMBER}
-                 Branch: ${GIT_BRANCH}
-                 URL: ${BUILD_URL}
-                 """
+            echo "Build FAILED: ${JOB_NAME} #${BUILD_NUMBER} on ${GIT_BRANCH}"
         }
     }
 }
