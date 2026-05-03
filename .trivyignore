@@ -1,0 +1,5 @@
+# .trivyignore
+# Add CVEs to ignore with justification
+
+# Example:
+# CVE-XXXX-XXXXX # Justification: Not applicable to our use case

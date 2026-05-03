@@ -7,6 +7,10 @@ pipeline {
         APP_DIR = 'app'
         VENV_DIR = 'venv'
         SONAR_TOKEN = 'squ_9d6a2dd07f91849e55f4bd5bf950196565d4d48c'
+        AWS_REGION = 'eu-north-1'
+        ECR_REPO = '587721667106.dkr.ecr.eu-north-1.amazonaws.com/devops-flask-app'
+        IMAGE_TAG = "${env.GIT_COMMIT?.take(7) ?: 'latest'}"
+        BRANCH_TAG = "${env.GIT_BRANCH?.replaceAll('/', '-') ?: 'main'}"
     }
 
     stages {
@@ -47,7 +51,6 @@ pipeline {
 
         stage('Test') {
             parallel {
-
                 stage('Unit Tests') {
                     steps {
                         echo 'Running Unit Tests...'
@@ -63,7 +66,6 @@ pipeline {
                         }
                     }
                 }
-
                 stage('Integration Tests') {
                     steps {
                         echo 'Running Integration Tests...'
@@ -79,7 +81,50 @@ pipeline {
                         }
                     }
                 }
+            }
+        }
 
+        stage('Container Build') {
+            steps {
+                echo 'Building Docker image...'
+                sh """
+                    docker build -t ${ECR_REPO}:${IMAGE_TAG} -t ${ECR_REPO}:${BRANCH_TAG} .
+                    echo "Image built successfully!"
+                """
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                echo 'Running Trivy vulnerability scan...'
+                sh """
+                    trivy image \
+                        --exit-code 0 \
+                        --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        --ignorefile .trivyignore \
+                        --format table \
+                        --output trivy-report.txt \
+                        ${ECR_REPO}:${IMAGE_TAG}
+                    cat trivy-report.txt
+                """
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                echo 'Pushing to ECR...'
+                sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin 587721667106.dkr.ecr.eu-north-1.amazonaws.com
+                    docker push ${ECR_REPO}:${IMAGE_TAG}
+                    docker push ${ECR_REPO}:${BRANCH_TAG}
+                    echo "Images pushed successfully!"
+                """
             }
         }
 
@@ -88,7 +133,6 @@ pipeline {
                 echo 'Packaging application...'
                 sh '''
                     tar --exclude=app/venv --exclude=app/__pycache__ -czf flask-app.tar.gz app/
-                    echo "Package created: flask-app.tar.gz"
                     ls -lh flask-app.tar.gz
                 '''
             }
@@ -96,20 +140,17 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo 'Deploying application...'
+                echo 'Deploying...'
                 sh '''
-                    echo "Deployment step - App packaged successfully"
                     echo "Build: ${BUILD_NUMBER}"
                     echo "Branch: ${GIT_BRANCH}"
                 '''
             }
         }
-
     }
 
     post {
         always {
-            echo 'Archiving build artifacts...'
             archiveArtifacts artifacts: 'flask-app.tar.gz', allowEmptyArchive: true
         }
         success {
