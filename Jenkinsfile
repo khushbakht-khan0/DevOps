@@ -40,7 +40,7 @@ pipeline {
                             -Dsonar.sources=app \
                             -Dsonar.language=py \
                             -Dsonar.python.version=3 \
-                            -Dsonar.host.url=http://51.20.123.103:9000 \
+                            -Dsonar.host.url=http://13.49.57.13:9000 \
                             -Dsonar.login=squ_9d6a2dd07f91849e55f4bd5bf950196565d4d48c
                     '''
                 }
