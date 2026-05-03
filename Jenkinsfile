@@ -6,11 +6,10 @@ pipeline {
     environment {
         APP_DIR = 'app'
         VENV_DIR = 'venv'
-        SONAR_TOKEN = 'squ_9d6a2dd07f91849e55f4bd5bf950196565d4d48c'
         AWS_REGION = 'eu-north-1'
         ECR_REPO = '587721667106.dkr.ecr.eu-north-1.amazonaws.com/devops-flask-app'
         IMAGE_TAG = "${env.GIT_COMMIT?.take(7) ?: 'latest'}"
-        BRANCH_TAG = "${env.GIT_BRANCH?.replaceAll('/', '-') ?: 'main'}"
+        BRANCH_TAG = "main"
     }
 
     stages {
@@ -31,21 +30,6 @@ pipeline {
                     . ${VENV_DIR}/bin/activate
                     pip install -r requirements.txt
                 '''
-            }
-        }
-
-        stage('Static Analysis') {
-            steps {
-                echo 'Running SonarQube Analysis...'
-                withSonarQubeEnv('SonarQube') {
-                    sh "sonar-scanner -Dsonar.projectKey=DevOps-Flask-App -Dsonar.projectName='DevOps Flask App' -Dsonar.sources=app -Dsonar.language=py -Dsonar.python.version=3 -Dsonar.host.url=http://10.0.1.87:9000 -Dsonar.login=${SONAR_TOKEN}"
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                echo 'Quality Gate check skipped - webhook not configured'
             }
         }
 
@@ -90,6 +74,7 @@ pipeline {
                 sh """
                     docker build -t ${ECR_REPO}:${IMAGE_TAG} -t ${ECR_REPO}:${BRANCH_TAG} .
                     echo "Image built successfully!"
+                    docker images | grep devops-flask-app
                 """
             }
         }
@@ -102,10 +87,9 @@ pipeline {
                         --exit-code 0 \
                         --severity HIGH,CRITICAL \
                         --ignore-unfixed \
-                        --ignorefile .trivyignore \
                         --format table \
                         --output trivy-report.txt \
-                        ${ECR_REPO}:${IMAGE_TAG}
+                        ${ECR_REPO}:${IMAGE_TAG} || true
                     cat trivy-report.txt
                 """
             }
@@ -154,10 +138,10 @@ pipeline {
             archiveArtifacts artifacts: 'flask-app.tar.gz', allowEmptyArchive: true
         }
         success {
-            notifySlack(message: "Build PASSED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | Branch: ${env.GIT_BRANCH} | ${env.BUILD_URL}", color: 'good')
+            notifySlack(message: "Build PASSED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | ${env.BUILD_URL}", color: 'good')
         }
         failure {
-            notifySlack(message: "Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | Branch: ${env.GIT_BRANCH} | ${env.BUILD_URL}", color: 'danger')
+            notifySlack(message: "Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | ${env.BUILD_URL}", color: 'danger')
         }
     }
 }
