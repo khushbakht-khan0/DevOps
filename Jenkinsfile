@@ -1,3 +1,5 @@
+@Library('jenkins-shared-library') _
+
 pipeline {
     agent { label 'linux-agent' }
 
@@ -96,14 +98,20 @@ pipeline {
     post {
         always {
             echo 'Archiving build artifacts...'
-            archiveArtifacts artifacts: 'flask-app.tar.gz', 
+            archiveArtifacts artifacts: 'flask-app.tar.gz',
                              allowEmptyArchive: true
         }
         success {
-            echo "Build SUCCESSFUL: ${JOB_NAME} #${BUILD_NUMBER} on ${GIT_BRANCH}"
+            notifySlack(
+                message: "Build PASSED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | Branch: ${env.GIT_BRANCH} | ${env.BUILD_URL}",
+                color: 'good'
+            )
         }
         failure {
-            echo "Build FAILED: ${JOB_NAME} #${BUILD_NUMBER} on ${GIT_BRANCH}"
+            notifySlack(
+                message: "Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} | Branch: ${env.GIT_BRANCH} | ${env.BUILD_URL}",
+                color: 'danger'
+            )
         }
     }
 }
