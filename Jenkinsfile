@@ -29,6 +29,33 @@ pipeline {
             }
         }
 
+        stage('Static Analysis') {
+            steps {
+                echo 'Running SonarQube Analysis...'
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        sonar-scanner \
+                            -Dsonar.projectKey=DevOps-Flask-App \
+                            -Dsonar.projectName="DevOps Flask App" \
+                            -Dsonar.sources=app \
+                            -Dsonar.language=py \
+                            -Dsonar.python.version=3 \
+                            -Dsonar.host.url=http://51.20.123.103:9000 \
+                            -Dsonar.login=squ_9d6a2dd07f91849e55f4bd5bf950196565d4d48c
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                echo 'Checking Quality Gate...'
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
         stage('Test') {
             parallel {
 
