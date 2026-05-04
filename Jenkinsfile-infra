@@ -1,0 +1,179 @@
+pipeline {
+    agent { label 'linux-agent' }
+
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Terraform action to perform'
+        )
+        booleanParam(
+            name: 'AUTO_APPROVE',
+            defaultValue: false,
+            description: 'Skip manual approval step (use with caution)'
+        )
+    }
+
+    environment {
+        AWS_CREDENTIALS  = credentials('aws-credentials')
+        TF_DIR           = 'terraform'
+        PLAN_FILE        = 'tfplan'
+        TFSEC_REPORT     = 'tfsec-report.json'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo "Checking out repository..."
+                checkout scm
+                echo "Branch: ${env.GIT_BRANCH} | Commit: ${env.GIT_COMMIT}"
+            }
+        }
+
+        stage('Fmt & Validate') {
+            steps {
+                dir("${TF_DIR}") {
+                    echo "Running terraform fmt check..."
+                    sh 'terraform fmt -check -recursive'
+
+                    echo "Running terraform init..."
+                    sh '''
+                        terraform init \
+                            -backend-config="bucket=devops-tf-state-22f-3630" \
+                            -backend-config="key=assignment3/terraform.tfstate" \
+                            -backend-config="region=eu-north-1" \
+                            -backend-config="dynamodb_table=terraform-state-lock" \
+                            -reconfigure
+                    '''
+
+                    echo "Running terraform validate..."
+                    sh 'terraform validate'
+                    echo "Fmt & Validate PASSED"
+                }
+            }
+        }
+
+        stage('Security Scan (tfsec)') {
+            steps {
+                dir("${TF_DIR}") {
+                    echo "Running tfsec security scan..."
+                    sh """
+                        tfsec . \
+                            --format json \
+                            --out ../${TFSEC_REPORT} \
+                            --minimum-severity HIGH \
+                            || true
+                    """
+
+                    sh """
+                        tfsec . \
+                            --minimum-severity HIGH \
+                            --no-color
+                    """
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "${TFSEC_REPORT}", allowEmptyArchive: true
+                    echo "tfsec report archived: ${TFSEC_REPORT}"
+                }
+            }
+        }
+
+        stage('Plan') {
+            steps {
+                dir("${TF_DIR}") {
+                    echo "Running terraform plan..."
+                    sh """
+                        terraform plan \
+                            -out=${PLAN_FILE} \
+                            -var-file=terraform.tfvars \
+                            -detailed-exitcode || true
+                    """
+                    echo "Plan saved to ${PLAN_FILE}"
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "${TF_DIR}/${PLAN_FILE}", allowEmptyArchive: true
+                    echo "Plan file archived"
+                }
+            }
+        }
+
+        stage('Manual Approval') {
+            when {
+                allOf {
+                    anyOf {
+                        expression { params.ACTION == 'apply' }
+                        expression { params.ACTION == 'destroy' }
+                    }
+                    expression { params.AUTO_APPROVE == false }
+                }
+            }
+            steps {
+                timeout(time: 30, unit: 'MINUTES') {
+                    input message: """
+=== TERRAFORM ${params.ACTION.toUpperCase()} APPROVAL ===
+Action  : ${params.ACTION}
+Branch  : ${env.GIT_BRANCH}
+Commit  : ${env.GIT_COMMIT}
+Plan    : ${TF_DIR}/${PLAN_FILE}
+
+Review the archived plan artifact before approving.
+Proceed with terraform ${params.ACTION}?
+""",
+                    ok: "Yes, ${params.ACTION.toUpperCase()} now",
+                    submitter: 'admin'
+                }
+                echo "Manual approval GRANTED — proceeding with ${params.ACTION}"
+            }
+        }
+
+        stage('Apply / Destroy') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'apply' }
+                    expression { params.ACTION == 'destroy' }
+                }
+            }
+            steps {
+                dir("${TF_DIR}") {
+                    script {
+                        if (params.ACTION == 'apply') {
+                            echo "Applying Terraform plan..."
+                            sh "terraform apply ${PLAN_FILE}"
+                            echo "terraform apply complete"
+
+                        } else if (params.ACTION == 'destroy') {
+                            echo "Destroying infrastructure..."
+                            if (params.AUTO_APPROVE) {
+                                sh 'terraform destroy -var-file=terraform.tfvars -auto-approve'
+                            } else {
+                                sh 'terraform destroy -var-file=terraform.tfvars -auto-approve'
+                            }
+                            echo "terraform destroy complete"
+                        }
+                    }
+                }
+            }
+        }
+
+    } // end stages
+
+    post {
+        always {
+            echo "=== PIPELINE COMPLETE ==="
+            echo "Action : ${params.ACTION}"
+            echo "Branch : ${env.GIT_BRANCH}"
+            echo "Build  : #${env.BUILD_NUMBER}"
+        }
+        success {
+            echo "Terraform ${params.ACTION} SUCCEEDED on build #${env.BUILD_NUMBER}"
+        }
+        failure {
+            echo "Terraform ${params.ACTION} FAILED on build #${env.BUILD_NUMBER}"
+        }
+    }
+}
